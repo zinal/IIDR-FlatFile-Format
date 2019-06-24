@@ -100,10 +100,13 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
     private final byte[] COMMA_AS_BYTE_ARRAY;
     private final byte[] QUOTE_AS_BYTE_ARRAY;
     private final byte[] COMMA_QUOTE_AS_BYTE_ARRAY;
+    private final String QUOTE_COMMA_QUOTE;
     private final byte[] QUOTE_COMMA_QUOTE_AS_BYTE_ARRAY;
     private final byte[] QUOTE_COMMA_AS_BYTE_ARRAY;
-    private final byte[] ZERO_AS_BYTE_ARRAY = toByteArray("0");
-    private final byte[] ONE_AS_BYTE_ARRAY = toByteArray("1");
+    private final String ZERO_AS_STRING = "0";
+    private final byte[] ZERO_AS_BYTE_ARRAY = toByteArray(ZERO_AS_STRING);
+    private final String ONE_AS_STRING = "1";
+    private final byte[] ONE_AS_BYTE_ARRAY = toByteArray(ONE_AS_STRING);
 
     private static final String DEFAULT_DATETIME_FORMAT = "yyyy-MM-dd hh:mm:ss";
     private static final String DEFAULT_COLUMN_SEPARATOR = ",";
@@ -215,7 +218,8 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         COMMA_AS_BYTE_ARRAY = toByteArray(columnSeparator);
         QUOTE_AS_BYTE_ARRAY = toByteArray(columnDelimiter);
         COMMA_QUOTE_AS_BYTE_ARRAY = toByteArray(columnSeparator + columnDelimiter);
-        QUOTE_COMMA_QUOTE_AS_BYTE_ARRAY = toByteArray(columnDelimiter + columnSeparator + columnDelimiter);
+        QUOTE_COMMA_QUOTE = columnDelimiter + columnSeparator + columnDelimiter;
+        QUOTE_COMMA_QUOTE_AS_BYTE_ARRAY = toByteArray(QUOTE_COMMA_QUOTE);
         QUOTE_COMMA_AS_BYTE_ARRAY = toByteArray(columnDelimiter + columnSeparator);
     }
 
@@ -381,9 +385,9 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
                     } else if (colObj instanceof Boolean) {
                         String outString = null;
                         if (((Boolean) colObj).booleanValue()) {
-                            outString = new String(ONE_AS_BYTE_ARRAY);
+                            outString = ONE_AS_STRING;
                         } else {
-                            outString = new String(ZERO_AS_BYTE_ARRAY);
+                            outString = ZERO_AS_STRING;
                         }
                         addStringElement(outBuffer, columnName, outString);
                     } else if (colObj instanceof String) {
@@ -483,7 +487,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
                 String outString = "";
                 if (image != null) {
                     for (int i = 1; i <= image.getColumnCount() - NUM_TRAILING_COLUMNS; i++) {
-                        outString = outString + new String(COMMA_AS_BYTE_ARRAY);
+                        outString = outString + columnSeparator;
                     }
                 }
                 csvNullImage = ByteBuffer.wrap(toByteArray(outString));
@@ -549,10 +553,10 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
 
         final String outString;
         if (csvOutput) {
-            outString = new String(QUOTE_AS_BYTE_ARRAY) + timestampString + new String(QUOTE_COMMA_QUOTE_AS_BYTE_ARRAY)
-                    + commitIDString + new String(QUOTE_COMMA_QUOTE_AS_BYTE_ARRAY) + opChar
-                    + new String(QUOTE_COMMA_QUOTE_AS_BYTE_ARRAY) + header.getUserName()
-                    + new String(QUOTE_AS_BYTE_ARRAY);
+            outString = columnDelimiter + timestampString 
+                    + QUOTE_COMMA_QUOTE + commitIDString + QUOTE_COMMA_QUOTE
+                    + opChar + QUOTE_COMMA_QUOTE + header.getUserName()
+                    + columnDelimiter;
         } else {
             // Compose the JSON string with audit columns, ending with ,"
             outString = FIXED_LEFT_CURLY 
