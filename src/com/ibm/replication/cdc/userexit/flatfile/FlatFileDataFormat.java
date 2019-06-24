@@ -83,30 +83,30 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
 	private static final int NUM_TRAILING_COLUMNS = JournalControlFieldRegistry.getNumberOfJournalControlFields();
 
 	private SimpleDateFormat outTimestampFormat;
-	private SimpleDateFormat outDateOnlyFormat = new SimpleDateFormat("yyyy-MM-dd");
-	private SimpleDateFormat outTimeOnlyFormat = new SimpleDateFormat("HH:mm:ss");
+	private final SimpleDateFormat outDateOnlyFormat = new SimpleDateFormat("yyyy-MM-dd");
+	private final SimpleDateFormat outTimeOnlyFormat = new SimpleDateFormat("HH:mm:ss");
 
 	private int clobTruncationPoint;
 	private int blobTruncationPoint;
 
-	private String FIXED_QUOTE;
-	private String FIXED_QUOTE_COLON_QUOTE;
-	private String FIXED_COMMA;
-	private String FIXED_LEFT_CURLY;
-	private String FIXED_RIGHT_CURLY;
-	private byte[] COMMA_AS_BYTE_ARRAY;
-	private byte[] QUOTE_AS_BYTE_ARRAY;
-	private byte[] COMMA_QUOTE_AS_BYTE_ARRAY;
-	private byte[] QUOTE_COMMA_QUOTE_AS_BYTE_ARRAY;
-	private byte[] QUOTE_COMMA_AS_BYTE_ARRAY;
-	private byte[] ZERO_AS_BYTE_ARRAY = getAsByteArrayInUtf8("0");
-	private byte[] ONE_AS_BYTE_ARRAY = getAsByteArrayInUtf8("1");
+	private final String FIXED_QUOTE;
+	private final String FIXED_QUOTE_COLON_QUOTE;
+	private final String FIXED_COMMA;
+	private final String FIXED_LEFT_CURLY;
+	private final String FIXED_RIGHT_CURLY;
+	private final byte[] COMMA_AS_BYTE_ARRAY;
+	private final byte[] QUOTE_AS_BYTE_ARRAY;
+	private final byte[] COMMA_QUOTE_AS_BYTE_ARRAY;
+	private final byte[] QUOTE_COMMA_QUOTE_AS_BYTE_ARRAY;
+	private final byte[] QUOTE_COMMA_AS_BYTE_ARRAY;
+	private final byte[] ZERO_AS_BYTE_ARRAY = getAsByteArrayInUtf8("0");
+	private final byte[] ONE_AS_BYTE_ARRAY = getAsByteArrayInUtf8("1");
 
-	private String DEFAULT_DATETIME_FORMAT = "yyyy-MM-dd hh:mm:ss";
-	private String DEFAULT_COLUMN_SEPARATOR = ",";
-	private String DEFAULT_COLUMN_DELIMITER = "\"";
-	private String DEFAULT_NEW_LINE = "\n";
-	private String DEFAULT_ESCAPE_CHARACTER = "\\";
+	private static final String DEFAULT_DATETIME_FORMAT = "yyyy-MM-dd hh:mm:ss";
+	private static final String DEFAULT_COLUMN_SEPARATOR = ",";
+	private static final String DEFAULT_COLUMN_DELIMITER = "\"";
+	private static final String DEFAULT_NEW_LINE = "\n";
+	private static final String DEFAULT_ESCAPE_CHARACTER = "\\";
 
 	private String lineOutputFormat = "CSV";
 	private boolean csvOutput = true;
@@ -551,7 +551,8 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
 	}
 
 	private String getJsonElement(String elementName, String elementValue) {
-		return new String(FIXED_QUOTE + elementName + FIXED_QUOTE_COLON_QUOTE + elementValue + FIXED_QUOTE);
+		return FIXED_QUOTE + elementName + FIXED_QUOTE_COLON_QUOTE 
+                        + elementValue + FIXED_QUOTE;
 	}
 
 	/**
