@@ -2,3 +2,4 @@
 /target/
 /run/log/
 /nbproject/
+.DS_Store
