@@ -36,7 +36,7 @@
 ** such damages.
 *****************************************************************************/
 
-package com.ibm.replication.cdc.userexit.flatfile;
+package com.ibm.idrcdc.userexit;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -229,11 +229,15 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
 
         try {
             URL fileURL = this.getClass().getClassLoader().getResource(propertiesFile);
+            if (fileURL==null)
+                throw new UserExitException("Missing properties file " + propertiesFile);
             Trace.traceAlways("Loading properties for data formatter " 
                     + this.getClass().getName() + " from file " + fileURL);
             Properties prop = new Properties();
             try (InputStream configFileStream = this.getClass()
                     .getClassLoader().getResourceAsStream(propertiesFile)) {
+                if (configFileStream==null)
+                    throw new UserExitException("Cannot read properties file " + fileURL);
                 prop.load(configFileStream);
             }
             
@@ -504,7 +508,8 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
      * @throws DataTypeConversionException
      */
     @Override
-    public ByteBuffer formatNullImage(DataRecordIF image) throws DataTypeConversionException {
+    public ByteBuffer formatNullImage(DataRecordIF image) 
+            throws DataTypeConversionException {
         final ByteBuffer returnByteBuffer;
         if (csvOutput) {
             // There is a separate data formatter for each table, so a null
