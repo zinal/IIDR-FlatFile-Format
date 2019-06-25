@@ -65,6 +65,9 @@ import java.nio.charset.Charset;
  * importer stages.
  */
 public class FlatFileDataFormat implements DataStageDataFormatIF {
+    
+    public static final String VERSION = 
+            "FlatFileDataFormat MVZ-1.0 2019-06-25";
 
     public final char SUB_RLA_STANDARD = 'Y';
     public final char SUB_RLA_AUDIT = 'A';
