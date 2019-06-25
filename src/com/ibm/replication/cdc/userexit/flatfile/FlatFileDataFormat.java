@@ -61,11 +61,8 @@ import com.datamirror.ts.util.trace.Trace;
 import java.nio.charset.Charset;
 
 /**
- *
  * Format the data suitable for the DataStage sequential file reader and column
  * importer stages.
- *
- *
  */
 public class FlatFileDataFormat implements DataStageDataFormatIF {
 
@@ -104,9 +101,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
     private final byte[] QUOTE_COMMA_QUOTE_AS_BYTE_ARRAY;
     private final byte[] QUOTE_COMMA_AS_BYTE_ARRAY;
     private final String ZERO_AS_STRING = "0";
-    private final byte[] ZERO_AS_BYTE_ARRAY = toByteArray(ZERO_AS_STRING);
     private final String ONE_AS_STRING = "1";
-    private final byte[] ONE_AS_BYTE_ARRAY = toByteArray(ONE_AS_STRING);
 
     private static final String DEFAULT_DATETIME_FORMAT = "yyyy-MM-dd hh:mm:ss";
     private static final String DEFAULT_COLUMN_SEPARATOR = ",";
@@ -223,67 +218,66 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         QUOTE_COMMA_AS_BYTE_ARRAY = toByteArray(columnDelimiter + columnSeparator);
     }
 
-    /*
-	 * Load the configuration from the properties file found in the classpath
+    /**
+     * Load the configuration from the properties file found in the classpath
+     * @throws UserExitException 
      */
     private void loadConfigurationProperties() throws UserExitException {
-
-        Properties prop = new Properties();
-        InputStream configFileStream = null;
-
         // Load the configuration properties from the
         // FlatFileDataFormat.properties file
         String propertiesFile = this.getClass().getSimpleName() + ".properties";
 
         try {
-
             URL fileURL = this.getClass().getClassLoader().getResource(propertiesFile);
-            Trace.traceAlways(
-                    "Loading properties for data formatter " + this.getClass().getName() + " from file " + fileURL);
-            configFileStream = this.getClass().getClassLoader().getResourceAsStream(propertiesFile);
-            prop.load(configFileStream);
-            configFileStream.close();
-
+            Trace.traceAlways("Loading properties for data formatter " 
+                    + this.getClass().getName() + " from file " + fileURL);
+            Properties prop = new Properties();
+            try (InputStream configFileStream = this.getClass()
+                    .getClassLoader().getResourceAsStream(propertiesFile)) {
+                prop.load(configFileStream);
+            }
+            
             lineOutputFormat = getProperty(prop, "lineOutputFormat", "CSV");
             if (lineOutputFormat.equalsIgnoreCase("CSV")) {
                 csvOutput = true;
             } else if (lineOutputFormat.equals("JSON")) {
                 csvOutput = false;
             } else {
-                throw new UserExitException("Invalid value " + lineOutputFormat + " for property lineOutputFormat");
+                throw new UserExitException("Invalid value [" 
+                        + lineOutputFormat + "] for property lineOutputFormat");
             }
 
-            overrideJournalControlTimestampFormat = getPropertyBoolean(prop, "overrideJournalControlTimestampFormat",
-                    false);
-            journalControlTimestampFormat = getProperty(prop, "journalControlTimestampFormat", DEFAULT_DATETIME_FORMAT);
-            overrideTimestampColumnFormat = getPropertyBoolean(prop, "overrideTimestampColumnFormat", false);
-            timestampColumnFormat = getProperty(prop, "timestampColumnFormat", DEFAULT_DATETIME_FORMAT);
-            columnSeparator = getProperty(prop, "columnSeparator", DEFAULT_COLUMN_SEPARATOR);
-            columnDelimiter = getProperty(prop, "columnDelimiter", DEFAULT_COLUMN_DELIMITER);
+            overrideJournalControlTimestampFormat = 
+                    getProperty(prop, "overrideJournalControlTimestampFormat", false);
+            journalControlTimestampFormat = 
+                    getProperty(prop, "journalControlTimestampFormat", DEFAULT_DATETIME_FORMAT);
+            overrideTimestampColumnFormat = 
+                    getProperty(prop, "overrideTimestampColumnFormat", false);
+            timestampColumnFormat = 
+                    getProperty(prop, "timestampColumnFormat", DEFAULT_DATETIME_FORMAT);
+            columnSeparator = 
+                    getProperty(prop, "columnSeparator", DEFAULT_COLUMN_SEPARATOR);
+            columnDelimiter = 
+                    getProperty(prop, "columnDelimiter", DEFAULT_COLUMN_DELIMITER);
             newLine = getProperty(prop, "newLine", DEFAULT_NEW_LINE);
-            stripControlCharacters = getPropertyBoolean(prop, "stripControlCharacters", true);
-            escapeControlCharacters = getPropertyBoolean(prop, "escapeControlCharacters", false);
-            escapeCharacter = getProperty(prop, "escapeCharacter", DEFAULT_NEW_LINE);
-            stripTrailingSpaces = getPropertyBoolean(prop, "stripTrailingSpaces", false);
+            stripControlCharacters = 
+                    getProperty(prop, "stripControlCharacters", true);
+            escapeControlCharacters = 
+                    getProperty(prop, "escapeControlCharacters", false);
+            escapeCharacter = 
+                    getProperty(prop, "escapeCharacter", DEFAULT_NEW_LINE);
+            stripTrailingSpaces = 
+                    getProperty(prop, "stripTrailingSpaces", false);
 
             // Set the default format for timestamps
             outTimestampFormat = new SimpleDateFormat(timestampColumnFormat);
-
-        } catch (IOException ex) {
-            ex.printStackTrace();
-        } finally {
-            if (configFileStream != null) {
-                try {
-                    configFileStream.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
+        } catch(IllegalArgumentException | IOException ex) {
+            throw new UserExitException(ex);
         }
     }
 
-    /*
-	 * Get property string value
+    /**
+     * Get property string value
      */
     private String getProperty(Properties properties, String property, String defaultValue) {
         String value = defaultValue;
@@ -295,10 +289,10 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         return value;
     }
 
-    /*
-	 * Get property boolean value
+    /**
+     * Get property boolean value
      */
-    private boolean getPropertyBoolean(Properties properties, String property, boolean defaultValue) {
+    private boolean getProperty(Properties properties, String property, boolean defaultValue) {
         boolean value = defaultValue;
         try {
             value = Boolean.parseBoolean(properties.getProperty(property, Boolean.toString(defaultValue)));
@@ -311,7 +305,10 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
 
     /**
      * Remember the truncation points.
+     * @param maxClobLengthInChars
+     * @param maxBlobLengthInBytes
      */
+    @Override
     public void setLobTruncationPoint(int maxClobLengthInChars, int maxBlobLengthInBytes) {
         clobTruncationPoint = maxClobLengthInChars;
         blobTruncationPoint = maxBlobLengthInBytes;
@@ -319,7 +316,11 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
 
     /**
      * Create a string containing the data images for the row.
+     * @param image
+     * @return 
+     * @throws com.datamirror.ts.target.publication.userexit.DataTypeConversionException
      */
+    @Override
     public ByteBuffer formatDataImage(DataRecordIF image) throws DataTypeConversionException {
         boolean needToCloseQuote = false;
         outBuffer.position(0);
@@ -352,7 +353,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
                     if (colObj instanceof Time) {
                         addStringElement(outBuffer, columnName, outTimeOnlyFormat.format((Time) colObj));
                     } else if (colObj instanceof Timestamp) {
-                        String outString = null;
+                        final String outString;
                         if (!overrideTimestampColumnFormat) {
                             outString = ((Timestamp) colObj).toString();
                         } else {
@@ -477,9 +478,13 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
 
     /**
      * Return a ByteBuffer containing the appropriate null values for the row.
+     * @param image
+     * @return 
+     * @throws com.datamirror.ts.target.publication.userexit.DataTypeConversionException
      */
+    @Override
     public ByteBuffer formatNullImage(DataRecordIF image) throws DataTypeConversionException {
-        ByteBuffer returnByteBuffer = null;
+        final ByteBuffer returnByteBuffer;
         if (csvOutput) {
             // There is a separate data formatter for each table, so a null
             // image is the same for each row, so just need to create it once
@@ -510,7 +515,12 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
      * Return a ByteBuffer containing the journal control field values that are
      * of interest.
      *
+     * @param event
+     * @param opType
+     * @return 
+     * @throws com.datamirror.ts.target.publication.userexit.DataTypeConversionException 
      */
+    @Override
     public ByteBuffer formatJournalControlFields(ReplicationEventIF event, int opType)
             throws DataTypeConversionException {
         // Make sure that the JSON record is only closed after the full image
@@ -580,12 +590,17 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
      * Indicate whether this table is being delivered to DataStage using flat
      * files or by direct connect. As CDC for DataStage only supports flat
      * files, the destination type is no longer relevant.
+     * @param destination
      */
+    @Override
     public void setDestinationType(int destination) {
     }
 
-    public void formatChangedRowFields(UserExitJournalHeader journalHeader, DataRecordIF rowDataImage,
-            Map<String, Object> changeRecord, int opType) throws DataTypeConversionException {
+    @Override
+    public void formatChangedRowFields(UserExitJournalHeader journalHeader, 
+            DataRecordIF rowDataImage,
+            Map<String, Object> changeRecord, int opType) 
+        throws DataTypeConversionException {
 
     }
 
