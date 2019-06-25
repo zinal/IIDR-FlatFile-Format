@@ -236,9 +236,9 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         try {
             URL fileURL = this.getClass().getClassLoader().getResource(propertiesFile);
             if (fileURL==null)
-                throw new UserExitException("Missing properties file " + propertiesFile);
+                throw new UserExitException("Missing properties " + propertiesFile);
             Trace.traceAlways("Loading properties for data formatter " 
-                    + this.getClass().getName() + " from file " + fileURL);
+                    + this.getClass().getName() + " from " + fileURL);
             Properties prop = new Properties();
             try (InputStream configFileStream = this.getClass()
                     .getClassLoader().getResourceAsStream(propertiesFile)) {
@@ -289,8 +289,8 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         final StringBuilder report = new StringBuilder();
         report.append(simpleName).append(" configuration: ");
         report.append("OF=").append(lineOutputFormat);
-        report.append(", ").append("COLSEP=").append(columnSeparator);
-        report.append(", ").append("COLDEL=").append(columnDelimiter);
+        report.append(", ").append("COLSEP=[").append(columnSeparator).append(']');
+        report.append(", ").append("COLDEL=[").append(columnDelimiter).append(']');
         report.append(", ").append("JCF.TS=")
                 .append(overrideJournalControlTimestampFormat ? 
                         journalControlTimestampFormat :
@@ -299,12 +299,15 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
                 .append(overrideTimestampColumnFormat ?
                         timestampColumnFormat :
                         "<default>");
-        report.append(", ").append("CTL.CHARS=")
-                .append(stripControlCharacters ?
-                        "strip" : (escapeControlCharacters ? 
-                                "escape[" + escapeCharacter + "]" : 
-                                "keep"));
-        report.append(", ").append("RTRIM").append(stripTrailingSpaces);
+        report.append(", ").append("CTL.CHARS=");
+        if (stripControlCharacters) {
+            report.append("strip");
+        } else if (escapeControlCharacters) {
+            report.append("escape[").append(escapeCharacter).append(']');
+        } else {
+            report.append("keep");
+        }
+        report.append(", ").append("RTRIM=").append(stripTrailingSpaces);
         Trace.traceAlways(report.toString());
     }
 
