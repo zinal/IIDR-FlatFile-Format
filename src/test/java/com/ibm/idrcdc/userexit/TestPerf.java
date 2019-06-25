@@ -8,8 +8,6 @@ import com.datamirror.ts.target.publication.userexit.InvalidSetDataException;
 import com.datamirror.ts.target.publication.userexit.JournalHeaderIF;
 import com.datamirror.ts.target.publication.userexit.ReplicationEventIF;
 import com.datamirror.ts.target.publication.userexit.Timestamp12;
-import com.ibm.idrcdc.userexit.FlatFileDataFormat;
-import com.ibm.idrcdc.userexit.FlatFileDataFormat;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.Date;
@@ -25,7 +23,6 @@ public class TestPerf {
     
     public static void main(String[] args) {
         try {
-            Thread.sleep(20000L);
             long tv0 = System.currentTimeMillis();
             final Record[] records = Record.makeRecords(100000);
             long tv1 = System.currentTimeMillis();
