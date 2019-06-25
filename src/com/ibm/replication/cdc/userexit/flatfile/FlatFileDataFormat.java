@@ -278,6 +278,10 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
 
     /**
      * Get property string value
+     * @param properties
+     * @param property
+     * @param defaultValue
+     * @return 
      */
     private String getProperty(Properties properties, String property, String defaultValue) {
         String value = defaultValue;
@@ -291,6 +295,10 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
 
     /**
      * Get property boolean value
+     * @param properties
+     * @param property
+     * @param defaultValue
+     * @return 
      */
     private boolean getProperty(Properties properties, String property, boolean defaultValue) {
         boolean value = defaultValue;
@@ -318,142 +326,14 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
      * Create a string containing the data images for the row.
      * @param image
      * @return 
-     * @throws com.datamirror.ts.target.publication.userexit.DataTypeConversionException
+     * @throws DataTypeConversionException
      */
     @Override
     public ByteBuffer formatDataImage(DataRecordIF image) throws DataTypeConversionException {
-        boolean needToCloseQuote = false;
         outBuffer.position(0);
 
-        if (image != null) {
-            for (int i = 1; i <= image.getColumnCount() - NUM_TRAILING_COLUMNS; i++) {
-                // Determine column name (prefix with B_ if before image of
-                // update)
-                String columnName = image.getColumnName(i);
-                if (!afterImage && currentOpType == DataStageDataFormatIF.FULL_UPDATE_RECORD) {
-                    columnName = "B_" + columnName;
-                }
-                Object colObj = image.getObject(i);
-
-                // For NULL values, we just leave the field empty
-                if (colObj != null) {
-                    if (csvOutput) {
-                        // For performance, we have this wacky logic to only do
-                        // one add of stuff between columns
-                        if (needToCloseQuote) {
-                            outBuffer.put(QUOTE_COMMA_QUOTE_AS_BYTE_ARRAY);
-                        } else {
-                            outBuffer.put(COMMA_QUOTE_AS_BYTE_ARRAY);
-                        }
-                        needToCloseQuote = true;
-                    } else {
-                        outBuffer = addString(outBuffer, FIXED_COMMA);
-                    }
-
-                    if (colObj instanceof Time) {
-                        addStringElement(outBuffer, columnName, outTimeOnlyFormat.format((Time) colObj));
-                    } else if (colObj instanceof Timestamp) {
-                        final String outString;
-                        if (!overrideTimestampColumnFormat) {
-                            outString = ((Timestamp) colObj).toString();
-                        } else {
-                            outString = outTimestampFormat.format((Timestamp) colObj);
-                        }
-                        addStringElement(outBuffer, columnName, outString);
-                    } else if (colObj instanceof Date) {
-                        // This must be checked
-                        // after Time,
-                        // Timestamp, as such
-                        // objects are also Date
-                        // objects
-                        addStringElement(outBuffer, columnName, outDateOnlyFormat.format((Date) colObj));
-                    } else if (colObj instanceof byte[]) {
-                        byte[] val = (byte[]) colObj;
-                        if (val.length > blobTruncationPoint) {
-                            byte[] truncVal = new byte[blobTruncationPoint];
-                            ByteBuffer truncBuffer = ByteBuffer.wrap(truncVal);
-                            truncBuffer.put(val, 0, blobTruncationPoint);
-                            val = truncVal;
-                        }
-                        if (!csvOutput) {
-                            outBuffer = addString(outBuffer,
-                                    FIXED_QUOTE + columnName + FIXED_QUOTE_COLON_QUOTE);
-                        }
-                        outBuffer = addBytesToByteBuffer(outBuffer, val);
-                        if (!csvOutput) {
-                            outBuffer = addString(outBuffer, FIXED_QUOTE);
-                        }
-                    } else if (colObj instanceof Boolean) {
-                        String outString = null;
-                        if (((Boolean) colObj).booleanValue()) {
-                            outString = ONE_AS_STRING;
-                        } else {
-                            outString = ZERO_AS_STRING;
-                        }
-                        addStringElement(outBuffer, columnName, outString);
-                    } else if (colObj instanceof String) {
-                        String val = ((String) colObj);
-                        if (val.length() > clobTruncationPoint) {
-                            val = val.substring(0, clobTruncationPoint);
-                        }
-
-                        // Strip trailing spaces from the string
-                        if (stripTrailingSpaces) {
-                            val = val.replaceAll("\\s+$", "");
-                        }
-
-                        // Strip control characters from the string
-                        if (stripControlCharacters) {
-                            if (!columnSeparator.isEmpty()) {
-                                val = val.replace(columnSeparator, "");
-                            }
-                            if (!columnDelimiter.isEmpty()) {
-                                val = val.replace(columnDelimiter, "");
-                            }
-                            if (!newLine.isEmpty()) {
-                                val = val.replace(newLine, "");
-                            }
-                        } else {
-                            // Escape control characters in the string
-                            if (escapeControlCharacters) {
-                                val = val.replace(escapeCharacter, escapeCharacter + escapeCharacter);
-                                if (!columnSeparator.isEmpty()) {
-                                    val = val.replace(columnSeparator, escapeCharacter + columnSeparator);
-                                }
-                                if (!columnDelimiter.isEmpty()) {
-                                    val = val.replace(columnDelimiter, escapeCharacter + columnDelimiter);
-                                }
-                                if (!newLine.isEmpty()) {
-                                    val = val.replace(newLine, escapeCharacter + newLine);
-                                }
-                            }
-                        }
-                        addStringElement(outBuffer, columnName, val);
-                    } else if (colObj instanceof BigDecimal) {
-                        addStringElement(outBuffer, columnName, ((BigDecimal) colObj).toString());
-                    } else {
-                        addStringElement(outBuffer, columnName, colObj.toString());
-                    }
-                } else {
-                    if (csvOutput) {
-                        if (needToCloseQuote) {
-                            outBuffer.put(QUOTE_COMMA_AS_BYTE_ARRAY);
-                            needToCloseQuote = false;
-                        } else {
-                            outBuffer.put(COMMA_AS_BYTE_ARRAY);
-                        }
-                    }
-                }
-            }
-            // Write closing quote or right curly bracket
-            if (csvOutput && needToCloseQuote) {
-                outBuffer.put(QUOTE_AS_BYTE_ARRAY);
-            }
-            if (!csvOutput && afterImage) {
-                outBuffer = addString(outBuffer, FIXED_RIGHT_CURLY);
-            }
-
-        }
+        // process the data image
+        handleImage(image);
 
         // If the before image was processed, make sure the next data image is
         // treated as the after image
@@ -462,6 +342,147 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         }
 
         return outBuffer;
+    }
+    
+    private void handleImage(DataRecordIF image) throws DataTypeConversionException {
+        if (image==null)
+            return;
+        
+        boolean needToCloseQuote = false;
+        for (int i = 1; i <= image.getColumnCount() - NUM_TRAILING_COLUMNS; i++) {
+            // Determine column name 
+            // (prefix with B_ if before image of update)
+            String colName = image.getColumnName(i);
+            if (!afterImage && currentOpType == DataStageDataFormatIF.FULL_UPDATE_RECORD) {
+                colName = "B_" + colName;
+            }
+            // Get the value
+            Object colObj = image.getObject(i);
+            
+            // For NULL values, we just leave the field empty
+            needToCloseQuote = (colObj != null) ?
+                    handleValue(colName, colObj, needToCloseQuote) :
+                    handleNull(colName, needToCloseQuote);
+        }
+        // Write closing quote or right curly bracket
+        if (csvOutput && needToCloseQuote) {
+            outBuffer.put(QUOTE_AS_BYTE_ARRAY);
+        }
+        if (!csvOutput && afterImage) {
+            outBuffer = addString(outBuffer, FIXED_RIGHT_CURLY);
+        }
+    }
+    
+    private boolean handleNull(String columnName, boolean needToCloseQuote)
+            throws DataTypeConversionException {
+        if (csvOutput) {
+            if (needToCloseQuote) {
+                outBuffer.put(QUOTE_COMMA_AS_BYTE_ARRAY);
+                needToCloseQuote = false;
+            } else {
+                outBuffer.put(COMMA_AS_BYTE_ARRAY);
+            }
+        }
+        return needToCloseQuote;
+    }
+    
+    private boolean handleValue(String columnName, Object colObj, 
+            boolean needToCloseQuote) throws DataTypeConversionException {
+        if (csvOutput) {
+            // For performance, we have this wacky logic to only do
+            // one add of stuff between columns
+            if (needToCloseQuote) {
+                outBuffer.put(QUOTE_COMMA_QUOTE_AS_BYTE_ARRAY);
+            } else {
+                outBuffer.put(COMMA_QUOTE_AS_BYTE_ARRAY);
+            }
+            needToCloseQuote = true;
+        } else {
+            outBuffer = addString(outBuffer, FIXED_COMMA);
+        }
+
+        if (colObj instanceof Time) {
+            addStringElement(outBuffer, columnName, outTimeOnlyFormat.format((Time) colObj));
+        } else if (colObj instanceof Timestamp) {
+            final String outString;
+            if (!overrideTimestampColumnFormat) {
+                outString = ((Timestamp) colObj).toString();
+            } else {
+                outString = outTimestampFormat.format((Timestamp) colObj);
+            }
+            addStringElement(outBuffer, columnName, outString);
+        } else if (colObj instanceof Date) {
+            // This must be checked after Time, Timestamp, as such
+            // objects are also Date objects
+            addStringElement(outBuffer, columnName, outDateOnlyFormat.format((Date) colObj));
+        } else if (colObj instanceof byte[]) {
+            byte[] val = (byte[]) colObj;
+            if (val.length > blobTruncationPoint) {
+                byte[] truncVal = new byte[blobTruncationPoint];
+                ByteBuffer truncBuffer = ByteBuffer.wrap(truncVal);
+                truncBuffer.put(val, 0, blobTruncationPoint);
+                val = truncVal;
+            }
+            if (!csvOutput) {
+                outBuffer = addString(outBuffer,
+                        FIXED_QUOTE + columnName + FIXED_QUOTE_COLON_QUOTE);
+            }
+            outBuffer = addBytesToByteBuffer(outBuffer, val);
+            if (!csvOutput) {
+                outBuffer = addString(outBuffer, FIXED_QUOTE);
+            }
+        } else if (colObj instanceof Boolean) {
+            String outString = null;
+            if (((Boolean) colObj).booleanValue()) {
+                outString = ONE_AS_STRING;
+            } else {
+                outString = ZERO_AS_STRING;
+            }
+            addStringElement(outBuffer, columnName, outString);
+        } else if (colObj instanceof String) {
+            String val = ((String) colObj);
+            if (val.length() > clobTruncationPoint) {
+                val = val.substring(0, clobTruncationPoint);
+            }
+
+            // Strip trailing spaces from the string
+            if (stripTrailingSpaces) {
+                val = val.replaceAll("\\s+$", "");
+            }
+
+            // Strip control characters from the string
+            if (stripControlCharacters) {
+                if (!columnSeparator.isEmpty()) {
+                    val = val.replace(columnSeparator, "");
+                }
+                if (!columnDelimiter.isEmpty()) {
+                    val = val.replace(columnDelimiter, "");
+                }
+                if (!newLine.isEmpty()) {
+                    val = val.replace(newLine, "");
+                }
+            } else {
+                // Escape control characters in the string
+                if (escapeControlCharacters) {
+                    val = val.replace(escapeCharacter, escapeCharacter + escapeCharacter);
+                    if (!columnSeparator.isEmpty()) {
+                        val = val.replace(columnSeparator, escapeCharacter + columnSeparator);
+                    }
+                    if (!columnDelimiter.isEmpty()) {
+                        val = val.replace(columnDelimiter, escapeCharacter + columnDelimiter);
+                    }
+                    if (!newLine.isEmpty()) {
+                        val = val.replace(newLine, escapeCharacter + newLine);
+                    }
+                }
+            }
+            addStringElement(outBuffer, columnName, val);
+        } else if (colObj instanceof BigDecimal) {
+            addStringElement(outBuffer, columnName, ((BigDecimal) colObj).toString());
+        } else {
+            addStringElement(outBuffer, columnName, colObj.toString());
+        }
+        return needToCloseQuote;
     }
 
     /**
@@ -480,7 +501,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
      * Return a ByteBuffer containing the appropriate null values for the row.
      * @param image
      * @return 
-     * @throws com.datamirror.ts.target.publication.userexit.DataTypeConversionException
+     * @throws DataTypeConversionException
      */
     @Override
     public ByteBuffer formatNullImage(DataRecordIF image) throws DataTypeConversionException {
@@ -518,7 +539,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
      * @param event
      * @param opType
      * @return 
-     * @throws com.datamirror.ts.target.publication.userexit.DataTypeConversionException 
+     * @throws DataTypeConversionException 
      */
     @Override
     public ByteBuffer formatJournalControlFields(ReplicationEventIF event, int opType)
