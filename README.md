@@ -34,7 +34,7 @@ Once you have updated the classpath, restart the CDC instance(s) for the changes
 ## Configuring the subscription
 Now that the setup tasks have been done and the formatter user exit is available to the CDC engine, you must create a subscription that targets the CDC for DataStage, writing to flat files on the local file system and subsequently map the tables.
 
-Finally, configure the subscription-level user exit. The full name of the user exit is: `com.ibm.replication.cdc.userexit.flatfile.FlatFileDataFormat`
+Finally, configure the subscription-level user exit. The full name of the user exit is: `com.ibm.idrcdc.userexit.FlatFileDataFormat`
 
 ![Subscription User Exit](Documentation/images/FlatFileFormat_UserExit.png)
 
@@ -55,12 +55,11 @@ If JSON has been chosen as the output format, the same changes would look as fol
 ```
 
 ## Compilation
-If you wish to compile the user exit yourself, the easiest method is to use Ant ([https://ant.apache.org/bindownload.cgi](https://ant.apache.org/bindownload.cgi)). 
+If you wish to compile the user exit yourself, you can use Maven.
 
-Once you have this installed:
-- Ensure that the ant executable is in the path
-- Go to the directory where you unzipped the user exit master file
-- Update the `ant.properties` and update the `CDC_ENGINE_HOME` property to match the location where you installed the CDC engine
-- Check the target version to be used (this is the Java version of the compiled objects) and should match the version of the Java Runtime Engine that is included with CDC
-- Run `ant`
+The project depends on the `ts.jar`, which can be extracted from the `lib` folder of CDC agent and installed to local Maven repository on the developer's computer. The example script to install `ts.jar` is `iidr-cdc-setup-maven-libs.sh`, available as part of the project.
+
+Once you have this installed the `ts.jar`, run Maven:
+- Ensure the `mvn` executable is in the path;
+- Run `mvn clean install`;
 - First the sources will be compiled into their respective .class files and finally the class files are packaged into a jar file that is contained in the `lib` directory
