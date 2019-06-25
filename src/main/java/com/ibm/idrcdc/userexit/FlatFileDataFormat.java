@@ -63,11 +63,15 @@ import java.nio.charset.Charset;
 /**
  * Format the data suitable for the DataStage sequential file reader and column
  * importer stages.
+ * 
+ * @author Alex Lavrov alexl@il.ibm.com
+ * @author Frank Ketelaars fketelaars@nl.ibm.com
+ * @author Maksim Zinal mzinal@ru.ibm.com
  */
 public class FlatFileDataFormat implements DataStageDataFormatIF {
     
     public static final String VERSION = 
-            "FlatFileDataFormat MVZ-1.0 2019-06-25";
+            "FlatFileDataFormat 3.0-MVZ 2019-06-25";
 
     public final char SUB_RLA_STANDARD = 'Y';
     public final char SUB_RLA_AUDIT = 'A';
@@ -147,7 +151,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
      * @param inString
      * @return
      */
-    public static ByteBuffer addString(ByteBuffer buf, String inString) {
+    public static ByteBuffer appendString(ByteBuffer buf, String inString) {
         ByteBuffer retVal;
         byte[] asBytes = inString.getBytes(UTF8_CS);
             
@@ -168,23 +172,13 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         return retVal;
     }
 
-    public static ByteBuffer addByteToByteBuffer(ByteBuffer buf, byte inByte) {
-        ByteBuffer retVal;
-
-        if (buf.capacity() < buf.position() + 1 + BYTE_BUFFER_SPACE_FOR_FIELD_SEPARATORS) {
-            int increment = 10000;
-            retVal = ByteBuffer.allocate(buf.capacity() + increment);
-            buf.flip();
-            retVal.put(buf);
-        } else {
-            retVal = buf;
-        }
-
-        retVal.put(inByte);
-        return retVal;
-    }
-
-    public static ByteBuffer addBytesToByteBuffer(ByteBuffer buf, byte[] asBytes) {
+    /**
+     * Add bytes to a byte buffer
+     * @param buf
+     * @param asBytes
+     * @return 
+     */
+    public static ByteBuffer appendBytes(ByteBuffer buf, byte[] asBytes) {
         ByteBuffer retVal;
 
         if (buf.capacity() < buf.position() + asBytes.length 
@@ -285,6 +279,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             Trace.traceAlways(ex);
             throw new UserExitException(ex);
         }
+        
         // Trace the configuration settings for analysis
         final StringBuilder report = new StringBuilder();
         report.append(simpleName).append(" configuration: ");
@@ -318,12 +313,14 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
      * @param defaultValue
      * @return 
      */
-    private String getProperty(Properties properties, String property, String defaultValue) {
+    private static String getProperty(Properties properties, String property, 
+            String defaultValue) {
         String value = defaultValue;
         try {
             value = properties.getProperty(property, defaultValue);
         } catch (Exception e) {
-            Trace.traceAlways("Error obtaining property " + property + ", using default value " + value);
+            Trace.traceAlways("Error obtaining property " 
+                    + property + ", using default value " + value);
         }
         return value;
     }
@@ -335,13 +332,16 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
      * @param defaultValue
      * @return 
      */
-    private boolean getProperty(Properties properties, String property, boolean defaultValue) {
+    private static boolean getProperty(Properties properties, 
+            String property, boolean defaultValue) {
         boolean value = defaultValue;
         try {
-            value = Boolean.parseBoolean(properties.getProperty(property, Boolean.toString(defaultValue)));
+            value = Boolean.parseBoolean(
+                    properties.getProperty(property, Boolean.toString(defaultValue)));
         } catch (Exception e) {
             Trace.traceAlways(
-                    "Error obtaining or converting property " + property + " to boolean, using default value " + value);
+                    "Error obtaining or converting property " 
+                            + property + " to boolean, using default value " + value);
         }
         return value;
     }
@@ -368,7 +368,8 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         outBuffer.position(0);
 
         // process the data image
-        handleImage(image);
+        if (image != null)
+            handleImage(image);
 
         // If the before image was processed, make sure the next data image is
         // treated as the after image
@@ -380,9 +381,6 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
     }
     
     private void handleImage(DataRecordIF image) throws DataTypeConversionException {
-        if (image==null)
-            return;
-        
         boolean needToCloseQuote = false;
         for (int i = 1; i <= image.getColumnCount() - NUM_TRAILING_COLUMNS; i++) {
             // Determine column name 
@@ -397,18 +395,18 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             // For NULL values, we just leave the field empty
             needToCloseQuote = (colObj != null) ?
                     handleValue(colName, colObj, needToCloseQuote) :
-                    handleNull(colName, needToCloseQuote);
+                    handleNull(needToCloseQuote);
         }
         // Write closing quote or right curly bracket
         if (csvOutput && needToCloseQuote) {
             outBuffer.put(QUOTE_AS_BYTE_ARRAY);
         }
         if (!csvOutput && afterImage) {
-            outBuffer = addString(outBuffer, FIXED_RIGHT_CURLY);
+            outBuffer = appendString(outBuffer, FIXED_RIGHT_CURLY);
         }
     }
     
-    private boolean handleNull(String columnName, boolean needToCloseQuote)
+    private boolean handleNull(boolean needToCloseQuote)
             throws DataTypeConversionException {
         if (csvOutput) {
             if (needToCloseQuote) {
@@ -421,7 +419,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         return needToCloseQuote;
     }
     
-    private boolean handleValue(String columnName, Object colObj, 
+    private boolean handleValue(String colName, Object colObj, 
             boolean needToCloseQuote) throws DataTypeConversionException {
         if (csvOutput) {
             // For performance, we have this wacky logic to only do
@@ -433,11 +431,11 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             }
             needToCloseQuote = true;
         } else {
-            outBuffer = addString(outBuffer, FIXED_COMMA);
+            outBuffer = appendString(outBuffer, FIXED_COMMA);
         }
 
         if (colObj instanceof Time) {
-            addStringElement(outBuffer, columnName, outTimeOnlyFormat.format((Time) colObj));
+            addElement(outBuffer, colName, outTimeOnlyFormat.format((Time) colObj));
         } else if (colObj instanceof Timestamp) {
             final String outString;
             if (!overrideTimestampColumnFormat) {
@@ -445,11 +443,11 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             } else {
                 outString = outTimestampFormat.format((Timestamp) colObj);
             }
-            addStringElement(outBuffer, columnName, outString);
+            addElement(outBuffer, colName, outString);
         } else if (colObj instanceof Date) {
             // This must be checked after Time, Timestamp, as such
             // objects are also Date objects
-            addStringElement(outBuffer, columnName, outDateOnlyFormat.format((Date) colObj));
+            addElement(outBuffer, colName, outDateOnlyFormat.format((Date) colObj));
         } else if (colObj instanceof byte[]) {
             byte[] val = (byte[]) colObj;
             if (val.length > blobTruncationPoint) {
@@ -459,12 +457,12 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
                 val = truncVal;
             }
             if (!csvOutput) {
-                outBuffer = addString(outBuffer,
-                        FIXED_QUOTE + columnName + FIXED_QUOTE_COLON_QUOTE);
+                outBuffer = appendString(outBuffer,
+                        FIXED_QUOTE + colName + FIXED_QUOTE_COLON_QUOTE);
             }
-            outBuffer = addBytesToByteBuffer(outBuffer, val);
+            outBuffer = appendBytes(outBuffer, val);
             if (!csvOutput) {
-                outBuffer = addString(outBuffer, FIXED_QUOTE);
+                outBuffer = appendString(outBuffer, FIXED_QUOTE);
             }
         } else if (colObj instanceof Boolean) {
             String outString = null;
@@ -473,7 +471,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             } else {
                 outString = ZERO_AS_STRING;
             }
-            addStringElement(outBuffer, columnName, outString);
+            addElement(outBuffer, colName, outString);
         } else if (colObj instanceof String) {
             String val = ((String) colObj);
             if (val.length() > clobTruncationPoint) {
@@ -511,11 +509,11 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
                     }
                 }
             }
-            addStringElement(outBuffer, columnName, val);
+            addElement(outBuffer, colName, val);
         } else if (colObj instanceof BigDecimal) {
-            addStringElement(outBuffer, columnName, ((BigDecimal) colObj).toString());
+            addElement(outBuffer, colName, ((BigDecimal) colObj).toString());
         } else {
-            addStringElement(outBuffer, columnName, colObj.toString());
+            addElement(outBuffer, colName, colObj.toString());
         }
         return needToCloseQuote;
     }
@@ -523,12 +521,12 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
     /**
      * Add element to the output buffer, depending if it's CSV of JSON
      */
-    private void addStringElement(ByteBuffer outBuffer, String columnName, String data)
+    private void addElement(ByteBuffer outBuffer, String colName, String data)
             throws DataTypeConversionException {
         if (csvOutput) {
-            outBuffer = addString(outBuffer, data);
+            outBuffer = appendString(outBuffer, data);
         } else {
-            outBuffer = addString(outBuffer, getJsonElement(columnName, data));
+            outBuffer = appendString(outBuffer, getJsonElement(colName, data));
         }
     }
 
@@ -634,7 +632,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         }
 
         ByteBuffer retVal = ByteBuffer.allocate(outString.length());
-        retVal = addString(retVal, outString);
+        retVal = appendString(retVal, outString);
         return retVal;
     }
 
