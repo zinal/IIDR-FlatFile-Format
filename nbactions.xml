@@ -10,7 +10,7 @@
                 <goal>org.codehaus.mojo:exec-maven-plugin:1.3.2:exec</goal>
             </goals>
             <properties>
-                <exec.args>-classpath %classpath:.. com.ibm.replication.cdc.userexit.flatfile.TestPerf</exec.args>
+                <exec.args>-classpath %classpath:.. com.ibm.idrcdc.userexit.TestPerf</exec.args>
                 <exec.executable>java</exec.executable>
                 <exec.workingdir>./run</exec.workingdir>
             </properties>
@@ -22,10 +22,10 @@
             </packagings>
             <goals>
                 <goal>process-classes</goal>
-                <goal>org.codehaus.mojo:exec-maven-plugin:1.2.1:exec</goal>
+                <goal>org.codehaus.mojo:exec-maven-plugin:1.3.2:exec</goal>
             </goals>
             <properties>
-                <exec.args>-Xdebug -Xrunjdwp:transport=dt_socket,server=n,address=${jpda.address} -classpath %classpath com.ibm.replication.cdc.userexit.flatfile.TestPerf</exec.args>
+                <exec.args>-Xdebug -Xrunjdwp:transport=dt_socket,server=n,address=${jpda.address} :.. :.. -classpath %classpath com.ibm.idrcdc.userexit.TestPerf</exec.args>
                 <exec.executable>java</exec.executable>
                 <jpda.listen>true</jpda.listen>
                 <exec.workingdir>./run</exec.workingdir>
@@ -38,10 +38,10 @@
             </packagings>
             <goals>
                 <goal>process-classes</goal>
-                <goal>org.codehaus.mojo:exec-maven-plugin:1.2.1:exec</goal>
+                <goal>org.codehaus.mojo:exec-maven-plugin:1.3.2:exec</goal>
             </goals>
             <properties>
-                <exec.args>-classpath %classpath com.ibm.replication.cdc.userexit.flatfile.TestPerf</exec.args>
+                <exec.args>-classpath %classpath:.. com.ibm.idrcdc.userexit.TestPerf</exec.args>
                 <exec.executable>java</exec.executable>
                 <exec.workingdir>./run</exec.workingdir>
             </properties>
@@ -59,6 +59,64 @@
                 <exec.args>-classpath %classpath:.. ${packageClassName}</exec.args>
                 <exec.executable>java</exec.executable>
                 <exec.classpathScope>${classPathScope}</exec.classpathScope>
+                <exec.workingdir>./run</exec.workingdir>
+            </properties>
+        </action>
+        <action>
+            <actionName>profile.single.main</actionName>
+            <packagings>
+                <packaging>*</packaging>
+            </packagings>
+            <goals>
+                <goal>process-classes</goal>
+                <goal>org.codehaus.mojo:exec-maven-plugin:1.3.2:exec</goal>
+            </goals>
+            <properties>
+                <exec.args>-classpath %classpath:.. ${packageClassName}</exec.args>
+                <exec.executable>java</exec.executable>
+                <exec.classpathScope>${classPathScope}</exec.classpathScope>
+                <exec.workingdir>./run</exec.workingdir>
+            </properties>
+        </action>
+        <action>
+            <actionName>debug.single.main</actionName>
+            <packagings>
+                <packaging>*</packaging>
+            </packagings>
+            <goals>
+                <goal>process-classes</goal>
+                <goal>org.codehaus.mojo:exec-maven-plugin:1.3.2:exec</goal>
+            </goals>
+            <properties>
+                <exec.args>-Xdebug -Xrunjdwp:transport=dt_socket,server=n,address=${jpda.address} -classpath %classpath ${packageClassName}</exec.args>
+                <exec.executable>java</exec.executable>
+                <exec.classpathScope>${classPathScope}</exec.classpathScope>
+                <jpda.listen>true</jpda.listen>
+            </properties>
+        </action>
+        <action>
+            <actionName>test.single</actionName>
+            <packagings>
+                <packaging>*</packaging>
+            </packagings>
+            <goals>
+                <goal>test-compile</goal>
+                <goal>surefire:test</goal>
+            </goals>
+            <properties>
+                <test>${packageClassName}</test>
+                <exec.workingdir>./run</exec.workingdir>
+            </properties>
+        </action>
+        <action>
+            <actionName>test</actionName>
+            <packagings>
+                <packaging>*</packaging>
+            </packagings>
+            <goals>
+                <goal>test</goal>
+            </goals>
+            <properties>
                 <exec.workingdir>./run</exec.workingdir>
             </properties>
         </action>
