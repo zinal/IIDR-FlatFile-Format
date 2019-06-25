@@ -34,7 +34,7 @@ Once you have updated the classpath, restart the CDC instance(s) for the changes
 ## Configuring the subscription
 Now that the setup tasks have been done and the formatter user exit is available to the CDC engine, you must create a subscription that targets the CDC for DataStage, writing to flat files on the local file system and subsequently map the tables.
 
-Finally, configure the subscription-level user exit. The full name of the user exit is: `com.ibm.replication.cdc.userexit.flatfile.FlatFileDataFormat`
+Finally, configure the subscription-level user exit. The full name of the user exit is: `com.ibm.idrcdc.userexit.FlatFileDataFormat`
 
 ![Subscription User Exit](Documentation/images/FlatFileFormat_UserExit.png)
 
