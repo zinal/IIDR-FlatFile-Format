@@ -11,7 +11,7 @@
  * 5724-Q36 IBM InfoSphere Change Data Delivery for Information Server
  * 5724-Q36 IBM InfoSphere Change Data Delivery for Netezza Technology for Information Server
  *
- * (C) Copyright IBM Corp. 2001, 2012  All Rights Reserved.
+ * (C) Copyright IBM Corp. 2001, 2012, 2019  All Rights Reserved.
  *
  * The source code for this program is not published or otherwise
  * divested of its trade secrets, irrespective of what has been
@@ -205,6 +205,8 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
     }
 
     public FlatFileDataFormat() throws UserExitException {
+        
+        Trace.traceAlways(VERSION);
 
         loadConfigurationProperties();
 
@@ -228,7 +230,8 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
     private void loadConfigurationProperties() throws UserExitException {
         // Load the configuration properties from the
         // FlatFileDataFormat.properties file
-        String propertiesFile = this.getClass().getSimpleName() + ".properties";
+        final String simpleName = this.getClass().getSimpleName();
+        final String propertiesFile = simpleName + ".properties";
 
         try {
             URL fileURL = this.getClass().getClassLoader().getResource(propertiesFile);
@@ -279,8 +282,30 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             // Set the default format for timestamps
             outTimestampFormat = new SimpleDateFormat(timestampColumnFormat);
         } catch(IllegalArgumentException | IOException ex) {
+            Trace.traceAlways(ex);
             throw new UserExitException(ex);
         }
+        // Trace the configuration settings for analysis
+        final StringBuilder report = new StringBuilder();
+        report.append(simpleName).append(" configuration: ");
+        report.append("OF=").append(lineOutputFormat);
+        report.append(", ").append("COLSEP=").append(columnSeparator);
+        report.append(", ").append("COLDEL=").append(columnDelimiter);
+        report.append(", ").append("JCF.TS=")
+                .append(overrideJournalControlTimestampFormat ? 
+                        journalControlTimestampFormat :
+                        "<default>");
+        report.append(", ").append("ANY.TS=")
+                .append(overrideTimestampColumnFormat ?
+                        timestampColumnFormat :
+                        "<default>");
+        report.append(", ").append("CTL.CHARS=")
+                .append(stripControlCharacters ?
+                        "strip" : (escapeControlCharacters ? 
+                                "escape[" + escapeCharacter + "]" : 
+                                "keep"));
+        report.append(", ").append("RTRIM").append(stripTrailingSpaces);
+        Trace.traceAlways(report.toString());
     }
 
     /**
