@@ -613,7 +613,8 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         if (overrideJournalControlTimestampFormat) {
             timestampString = header.getDSOutputTimestamp().toString();
         } else {
-            timestampString = new SimpleDateFormat(journalControlTimestampFormat).format(header.getDSOutputTimestamp());
+            timestampString = new SimpleDateFormat(journalControlTimestampFormat)
+                    .format(header.getDSOutputTimestamp());
         }
 
         final String outString;
