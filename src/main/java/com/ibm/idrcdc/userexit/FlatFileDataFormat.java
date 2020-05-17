@@ -71,7 +71,7 @@ import java.nio.charset.Charset;
 public class FlatFileDataFormat implements DataStageDataFormatIF {
     
     public static final String VERSION = 
-            "FlatFileDataFormat 3.1-MVZ 2020-05-17";
+            "FlatFileDataFormat 3.2-MVZ 2020-05-17";
 
     public final char SUB_RLA_STANDARD = 'Y';
     public final char SUB_RLA_AUDIT = 'A';
@@ -95,6 +95,8 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
 
     private int clobTruncationPoint;
     private int blobTruncationPoint;
+    
+    private final String simpleName;
 
     private final String FIXED_QUOTE;
     private final String FIXED_QUOTE_COLON_QUOTE;
@@ -129,11 +131,16 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
     private boolean escapeControlCharacters = false;
     private String escapeCharacter = DEFAULT_ESCAPE_CHARACTER;
     private boolean stripTrailingSpaces = false;
+    private String prefixNewLine = "";
+    
+    private final String escapedNewLine;
+    private final String escapedColSep;
+    private final String escapedColDel;
 
     private boolean afterImage = false;
 
-    ByteBuffer outBuffer = ByteBuffer.allocate(BYTE_BUFFER_AUTO_INCREMENT_SIZE);
-    ByteBuffer csvNullImage = null;
+    private ByteBuffer outBuffer = ByteBuffer.allocate(BYTE_BUFFER_AUTO_INCREMENT_SIZE);
+    private ByteBuffer csvNullImage = null;
     private int currentOpType;
 
     /**
@@ -197,9 +204,36 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         retVal.put(asBytes);
         return retVal;
     }
+    
+    public static String escape(String input, String esc) {
+        if (input==null || input.length()==0)
+            return input;
+        if (esc==null || esc.length()==0)
+            return input;
+        final StringBuilder sb = new StringBuilder();
+        for (char c : input.toCharArray()) {
+            sb.append(esc).append(c);
+        }
+        return sb.toString();
+    }
+    
+    public static String printable(String input) {
+        if (input==null)
+            return "<null>";
+        final StringBuilder sb = new StringBuilder();
+        for (char c : input.toCharArray()) {
+            if (Character.isISOControl(c)) {
+                sb.append("\\u{").append(Integer.toHexString((int)c)).append('}');
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
 
     public FlatFileDataFormat() throws UserExitException {
         
+        this.simpleName = this.getClass().getSimpleName();
         Trace.traceAlways(VERSION);
 
         loadConfigurationProperties();
@@ -215,16 +249,20 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         QUOTE_COMMA_QUOTE = columnDelimiter + columnSeparator + columnDelimiter;
         QUOTE_COMMA_QUOTE_AS_BYTE_ARRAY = toByteArray(QUOTE_COMMA_QUOTE);
         QUOTE_COMMA_AS_BYTE_ARRAY = toByteArray(columnDelimiter + columnSeparator);
+        
+        this.escapedNewLine = escape(newLine, escapeCharacter);
+        this.escapedColDel = escape(columnDelimiter, escapeCharacter);
+        this.escapedColSep = escape(columnSeparator, escapeCharacter);
+        
+        traceConfigReport();
     }
 
     /**
-     * Load the configuration from the properties file found in the classpath
+     * Load the configuration from the properties file found in the classpath.
+     * Standard name is FlatFileDataFormat.properties
      * @throws UserExitException 
      */
     private void loadConfigurationProperties() throws UserExitException {
-        // Load the configuration properties from the
-        // FlatFileDataFormat.properties file
-        final String simpleName = this.getClass().getSimpleName();
         final String propertiesFile = simpleName + ".properties";
 
         try {
@@ -264,6 +302,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             columnDelimiter = 
                     getProperty(prop, "columnDelimiter", DEFAULT_COLUMN_DELIMITER);
             newLine = getProperty(prop, "newLine", DEFAULT_NEW_LINE);
+            prefixNewLine = getProperty(prop, "prefixNewLine", "");
             stripControlCharacters = 
                     getProperty(prop, "stripControlCharacters", true);
             escapeControlCharacters = 
@@ -279,13 +318,21 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             Trace.traceAlways(ex);
             throw new UserExitException(ex);
         }
-        
+    }
+    
+    private void traceConfigReport() {
         // Trace the configuration settings for analysis
         final StringBuilder report = new StringBuilder();
         report.append(simpleName).append(" configuration: ");
         report.append("OF=").append(lineOutputFormat);
-        report.append(", ").append("COLSEP=[").append(columnSeparator).append(']');
-        report.append(", ").append("COLDEL=[").append(columnDelimiter).append(']');
+        report.append(", ").append("COLSEP=[")
+                .append(printable(columnSeparator)).append(']');
+        report.append(", ").append("COLDEL=[")
+                .append(printable(columnDelimiter)).append(']');
+        report.append(", ").append("NL=[")
+                .append(printable(newLine)).append(']');
+        report.append(", ").append("PNL=[")
+                .append(printable(prefixNewLine)).append(']');
         report.append(", ").append("JCF.TS=")
                 .append(overrideJournalControlTimestampFormat ? 
                         journalControlTimestampFormat :
@@ -298,11 +345,12 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         if (stripControlCharacters) {
             report.append("strip");
         } else if (escapeControlCharacters) {
-            report.append("escape[").append(escapeCharacter).append(']');
+            report.append("escape[").append(printable(escapeCharacter)).append(']');
         } else {
             report.append("keep");
         }
         report.append(", ").append("RTRIM=").append(stripTrailingSpaces);
+        
         Trace.traceAlways(report.toString());
     }
 
@@ -397,12 +445,16 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
                     handleValue(colName, colObj, needToCloseQuote) :
                     handleNull(needToCloseQuote);
         }
-        // Write closing quote or right curly bracket
-        if (csvOutput && needToCloseQuote) {
-            outBuffer.put(QUOTE_AS_BYTE_ARRAY);
-        }
-        if (!csvOutput && afterImage) {
-            outBuffer = appendString(outBuffer, FIXED_RIGHT_CURLY);
+        if (csvOutput) {
+            // CSV format closing: closing quote + newline prefix
+            if (needToCloseQuote)
+                outBuffer.put(QUOTE_AS_BYTE_ARRAY);
+            if (afterImage && prefixNewLine.length() > 0)
+                outBuffer = appendString(outBuffer, prefixNewLine);
+        } else {
+            // JSON format closing: right curly bracket
+            if (afterImage)
+                 outBuffer = appendString(outBuffer, FIXED_RIGHT_CURLY);
         }
     }
     
@@ -435,7 +487,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         }
 
         if (colObj instanceof Time) {
-            addElement(outBuffer, colName, outTimeOnlyFormat.format((Time) colObj));
+            addElement(colName, outTimeOnlyFormat.format((Time) colObj));
         } else if (colObj instanceof Timestamp) {
             final String outString;
             if (!overrideTimestampColumnFormat) {
@@ -443,11 +495,11 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             } else {
                 outString = outTimestampFormat.format((Timestamp) colObj);
             }
-            addElement(outBuffer, colName, outString);
+            addElement(colName, outString);
         } else if (colObj instanceof Date) {
             // This must be checked after Time, Timestamp, as such
             // objects are also Date objects
-            addElement(outBuffer, colName, outDateOnlyFormat.format((Date) colObj));
+            addElement(colName, outDateOnlyFormat.format((Date) colObj));
         } else if (colObj instanceof byte[]) {
             byte[] val = (byte[]) colObj;
             if (val.length > blobTruncationPoint) {
@@ -465,13 +517,13 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
                 outBuffer = appendString(outBuffer, FIXED_QUOTE);
             }
         } else if (colObj instanceof Boolean) {
-            String outString = null;
+            final String outString;
             if (((Boolean) colObj).booleanValue()) {
                 outString = ONE_AS_STRING;
             } else {
                 outString = ZERO_AS_STRING;
             }
-            addElement(outBuffer, colName, outString);
+            addElement(colName, outString);
         } else if (colObj instanceof String) {
             String val = ((String) colObj);
             if (val.length() > clobTruncationPoint) {
@@ -485,6 +537,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
 
             // Strip control characters from the string
             if (stripControlCharacters) {
+                // Just strip all control characters
                 if (!columnSeparator.isEmpty()) {
                     val = val.replace(columnSeparator, "");
                 }
@@ -494,26 +547,24 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
                 if (!newLine.isEmpty()) {
                     val = val.replace(newLine, "");
                 }
-            } else {
+            } else if (escapeControlCharacters) {
                 // Escape control characters in the string
-                if (escapeControlCharacters) {
-                    val = val.replace(escapeCharacter, escapeCharacter + escapeCharacter);
-                    if (!columnSeparator.isEmpty()) {
-                        val = val.replace(columnSeparator, escapeCharacter + columnSeparator);
-                    }
-                    if (!columnDelimiter.isEmpty()) {
-                        val = val.replace(columnDelimiter, escapeCharacter + columnDelimiter);
-                    }
-                    if (!newLine.isEmpty()) {
-                        val = val.replace(newLine, escapeCharacter + newLine);
-                    }
+                val = val.replace(escapeCharacter, escapeCharacter + escapeCharacter);
+                if (!columnSeparator.isEmpty()) {
+                    val = val.replace(columnSeparator, escapedColSep);
+                }
+                if (!columnDelimiter.isEmpty()) {
+                    val = val.replace(columnDelimiter, escapedColDel);
+                }
+                if (!newLine.isEmpty()) {
+                    val = val.replace(newLine, escapedNewLine);
                 }
             }
-            addElement(outBuffer, colName, val);
+            addElement(colName, val);
         } else if (colObj instanceof BigDecimal) {
-            addElement(outBuffer, colName, ((BigDecimal) colObj).toString());
+            addElement(colName, ((BigDecimal) colObj).toString());
         } else {
-            addElement(outBuffer, colName, colObj.toString());
+            addElement(colName, colObj.toString());
         }
         return needToCloseQuote;
     }
@@ -521,7 +572,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
     /**
      * Add element to the output buffer, depending if it's CSV of JSON
      */
-    private void addElement(ByteBuffer outBuffer, String colName, String data)
+    private void addElement(String colName, String data)
             throws DataTypeConversionException {
         if (csvOutput) {
             outBuffer = appendString(outBuffer, data);
