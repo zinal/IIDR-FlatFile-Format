@@ -532,7 +532,9 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
 
             // Strip trailing spaces from the string
             if (stripTrailingSpaces) {
-                val = val.replaceAll("\\s+$", "");
+                int sz = val.length();
+                if (sz > 0 && Character.isWhitespace(val.charAt(sz-1)))
+                    val = val.replaceAll("\\s+$", "");
             }
 
             // Strip control characters from the string
@@ -655,24 +657,37 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
 
         }
         String opString = "" + opChar;
-
-        UserExitJournalHeader header = (UserExitJournalHeader) event.getJournalHeader();
-        String commitIDString = header.getCommitID();
-
-        // Retrieve and format the journal control timestamp
+        
         final String timestampString;
-        if (overrideJournalControlTimestampFormat) {
-            timestampString = header.getDSOutputTimestamp().toString();
+        final String commitIDString;
+        final String userName;
+
+        if (event==null) {
+            // null event is for mock/performance test mode only
+            timestampString = "2020-01-01 12:00:00";
+            commitIDString = "123456";
+            userName = "username";
         } else {
-            timestampString = new SimpleDateFormat(journalControlTimestampFormat)
-                    .format(header.getDSOutputTimestamp());
+            // normal processing
+            UserExitJournalHeader header = (UserExitJournalHeader) 
+                    event.getJournalHeader();
+            commitIDString = header.getCommitID();
+            userName = header.getUserName();
+            // Retrieve and format the journal control timestamp
+            if (overrideJournalControlTimestampFormat) {
+                timestampString = header.getDSOutputTimestamp().toString();
+            } else {
+                timestampString = new SimpleDateFormat(journalControlTimestampFormat)
+                        .format(header.getDSOutputTimestamp());
+            }
+
         }
 
         final String outString;
         if (csvOutput) {
             outString = columnDelimiter + timestampString 
                     + QUOTE_COMMA_QUOTE + commitIDString + QUOTE_COMMA_QUOTE
-                    + opChar + QUOTE_COMMA_QUOTE + header.getUserName()
+                    + opChar + QUOTE_COMMA_QUOTE + userName
                     + columnDelimiter;
         } else {
             // Compose the JSON string with audit columns, ending with ,"
@@ -680,7 +695,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
                     + getJsonElement("AUD_TIMESTAMP", timestampString) + FIXED_COMMA
                     + getJsonElement("AUD_CCID", commitIDString) + FIXED_COMMA 
                     + getJsonElement("AUD_ENTTYP", opString) + FIXED_COMMA 
-                    + getJsonElement("AUD_USER", header.getUserName());
+                    + getJsonElement("AUD_USER", userName);
         }
 
         ByteBuffer retVal = ByteBuffer.allocate(outString.length());

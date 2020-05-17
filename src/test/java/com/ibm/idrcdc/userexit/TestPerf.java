@@ -1,15 +1,16 @@
 package com.ibm.idrcdc.userexit;
 
-import com.datamirror.ts.target.publication.UserExitJournalHeader;
 import com.datamirror.ts.target.publication.userexit.DataRecordIF;
 import com.datamirror.ts.target.publication.userexit.DataTypeConversionException;
-import com.datamirror.ts.target.publication.userexit.EventServerIF;
 import com.datamirror.ts.target.publication.userexit.InvalidSetDataException;
-import com.datamirror.ts.target.publication.userexit.JournalHeaderIF;
-import com.datamirror.ts.target.publication.userexit.ReplicationEventIF;
 import com.datamirror.ts.target.publication.userexit.Timestamp12;
+import com.datamirror.ts.target.publication.userexit.datastage.DataStageDataFormatIF;
+import com.ibm.idrcdc.userexit.FlatFileDataFormat;
+import java.io.FileOutputStream;
 import java.math.BigDecimal;
-import java.sql.Connection;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.Charset;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
@@ -21,25 +22,67 @@ import java.util.Random;
  */
 public class TestPerf {
     
+    private static final boolean IS_WRITING = false;
+    
     public static void main(String[] args) {
         try {
             long tv0 = System.currentTimeMillis();
-            final Record[] records = Record.makeRecords(100000);
+            final int count = 50000;
+            final Record[] recordsBefore = Record.makeRecords(count);
+            final Record[] recordsAfter = Record.makeRecords(count);
             long tv1 = System.currentTimeMillis();
             System.out.println("Generated data in " + (tv1-tv0) + " millis");
             final FlatFileDataFormat ffdf = new FlatFileDataFormat();
             long tv2 = System.currentTimeMillis();
             System.out.println("Init data in " + (tv2-tv1) + " millis");
-            for (int j=0; j<10000; ++j) {
-                for ( int i=0; i<records.length; ++i ) {
-                    ffdf.formatDataImage(records[i]);
+            
+            try (FileChannel channel = 
+                    new FileOutputStream("output.txt").getChannel()) {
+                for (int j=0; j<100; ++j) {
+                    for (int i=0; i<count; ++i) {
+                        formatRecord(ffdf, recordsBefore[i], recordsAfter[i], channel);
+                    }
                 }
+                
             }
+            
             long tv3 = System.currentTimeMillis();
             System.out.println("Formatted data in " + (tv3-tv2) + " millis");
         } catch(Exception ex) {
             ex.printStackTrace(System.out);
             System.exit(1);
+        }
+    }
+    
+    private static void writeBuffer(ByteBuffer bb, FileChannel channel)
+            throws Exception {
+        bb.flip();
+        if (IS_WRITING) {
+            while (bb.hasRemaining())
+                channel.write(bb);
+        }
+        bb.clear();
+    }
+    
+    private static void formatRecord(FlatFileDataFormat ffdf, 
+            Record dataBefore, Record dataAfter, 
+            FileChannel channel) throws Exception {
+        // Journal control formatting
+        ByteBuffer bb = ffdf.formatJournalControlFields(null, 
+                DataStageDataFormatIF.FULL_UPDATE_RECORD);
+        writeBuffer(bb, channel);
+        // Before image
+        bb = ffdf.formatDataImage(dataBefore);
+        writeBuffer(bb, channel);
+        // After image
+        bb = ffdf.formatDataImage(dataAfter);
+        writeBuffer(bb, channel);
+        bb = ByteBuffer.wrap(
+            "\n".getBytes(Charset.forName("UTF-8"))
+        );
+        if (IS_WRITING) {
+            while (bb.hasRemaining())
+                channel.write(bb);
         }
     }
     
@@ -49,23 +92,24 @@ public class TestPerf {
         private final Object[] data;
         
         public Record() {
-            data = new Object[10];
+            data = new Object[11];
             final long tv = System.currentTimeMillis();
             data[0] = new java.sql.Time(tv - (1000L) * random.nextInt(1000));
-            data[1] = new java.sql.Timestamp(tv 
+            data[1] = data[0];
+            data[2] = new java.sql.Timestamp(tv 
                     - (24L*3600L*1000L * random.nextInt(3650))
                     - (1000L) * random.nextInt(1000));
-            data[2] = new java.sql.Date(tv 
+            data[3] = new java.sql.Date(tv 
                     - (24L*3600L*1000L * random.nextInt(3650)));
             final byte[] bytes = new byte[300];
             random.nextBytes(bytes);
-            data[3] = bytes;
-            data[4] = random.nextBoolean();
-            data[5] = randomString(random.nextInt(50)+20);
-            data[6] = randomString(random.nextInt(10)+10);
-            data[7] = random.nextInt();
-            data[8] = new BigDecimal(random.nextDouble() * 10000.0);
-            data[9] = 10000.0 * random.nextDouble();
+            data[4] = bytes;
+            data[5] = random.nextBoolean();
+            data[6] = randomString(random.nextInt(50)+20);
+            data[7] = randomString(random.nextInt(10)+10) + "       ";
+            data[8] = random.nextInt();
+            data[9] = new BigDecimal(random.nextDouble() * 10000.0);
+            data[10] = 10000.0 * random.nextDouble();
         }
         
         public static Record[] makeRecords(int count) {
@@ -92,7 +136,8 @@ public class TestPerf {
 
         @Override
         public int getColumnCount() {
-            return data.length;
+            // NUM_TRAILING_COLUMNS == 18
+            return 18 + data.length - 1;
         }
 
         @Override
@@ -501,107 +546,5 @@ public class TestPerf {
         }
         
     } // class Record
-    
-    public static class Event implements ReplicationEventIF {
-
-        @Override
-        public int getEventType() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public String getTableName() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public String getTablePath() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public String getSourceMemberName() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public JournalHeaderIF getBeforeJournalHeader() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public JournalHeaderIF getJournalHeader() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public DataRecordIF getData() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public DataRecordIF getSourceData() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public DataRecordIF getBeforeData() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public DataRecordIF getSourceBeforeData() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public DataRecordIF getCurrentData() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public void setEventServerOperation(int i) {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public void setEventServerQueue(String string, String string1) {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public Connection getSharedConnection() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public EventServerIF getEventServer() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public Object getUserExitSubscriptionContext() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public void setUserExitSubscriptionContext(Object o) {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-
-        @Override
-        public void logEvent(String string) {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
-        
-    } // class Event
-    
-    public static class Header extends UserExitJournalHeader {
-        
-        public Header() {
-            super(null, true);
-        }
-        
-    } // class Header
     
 }
