@@ -71,7 +71,7 @@ import java.nio.charset.Charset;
 public class FlatFileDataFormat implements DataStageDataFormatIF {
     
     public static final String VERSION = 
-            "FlatFileDataFormat 3.0-MVZ 2019-06-25";
+            "FlatFileDataFormat 3.1-MVZ 2020-05-17";
 
     public final char SUB_RLA_STANDARD = 'Y';
     public final char SUB_RLA_AUDIT = 'A';
@@ -269,7 +269,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             escapeControlCharacters = 
                     getProperty(prop, "escapeControlCharacters", false);
             escapeCharacter = 
-                    getProperty(prop, "escapeCharacter", DEFAULT_NEW_LINE);
+                    getProperty(prop, "escapeCharacter", DEFAULT_ESCAPE_CHARACTER);
             stripTrailingSpaces = 
                     getProperty(prop, "stripTrailingSpaces", false);
 
