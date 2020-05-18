@@ -71,7 +71,7 @@ import java.nio.charset.Charset;
 public class FlatFileDataFormat implements DataStageDataFormatIF {
     
     public static final String VERSION = 
-            "FlatFileDataFormat 3.2-MVZ 2020-05-17";
+            "FlatFileDataFormat 3.3-MVZ 2020-05-18";
 
     public final char SUB_RLA_STANDARD = 'Y';
     public final char SUB_RLA_AUDIT = 'A';
@@ -614,8 +614,8 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             }
             returnByteBuffer = ByteBuffer.wrap(toByteArray(outString));
             returnByteBuffer.position(returnByteBuffer.capacity());
-            afterImage = true; // Next image is the after image
         }
+        afterImage = true; // Next image is the after image
         return returnByteBuffer;
     }
 
