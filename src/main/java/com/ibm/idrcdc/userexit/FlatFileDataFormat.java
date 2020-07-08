@@ -43,6 +43,8 @@ import java.io.InputStream;
 import java.math.BigDecimal;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
@@ -52,13 +54,9 @@ import java.util.Properties;
 
 import com.datamirror.ts.jrncontrol.JournalControlFieldRegistry;
 import com.datamirror.ts.target.publication.UserExitJournalHeader;
-import com.datamirror.ts.target.publication.userexit.DataRecordIF;
-import com.datamirror.ts.target.publication.userexit.DataTypeConversionException;
-import com.datamirror.ts.target.publication.userexit.ReplicationEventIF;
-import com.datamirror.ts.target.publication.userexit.UserExitException;
+import com.datamirror.ts.target.publication.userexit.*;
 import com.datamirror.ts.target.publication.userexit.datastage.DataStageDataFormatIF;
 import com.datamirror.ts.util.trace.Trace;
-import java.nio.charset.Charset;
 
 /**
  * Format the data suitable for the DataStage sequential file reader and column
@@ -71,7 +69,7 @@ import java.nio.charset.Charset;
 public class FlatFileDataFormat implements DataStageDataFormatIF {
     
     public static final String VERSION = 
-            "FlatFileDataFormat 3.3-MVZ 2020-05-18";
+            "FlatFileDataFormat 3.4-MVZ 2020-07-08";
 
     public final char SUB_RLA_STANDARD = 'Y';
     public final char SUB_RLA_AUDIT = 'A';
@@ -81,7 +79,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
     public final char SUB_RLA_NONE = 'N';
     public final char SUB_RLA_NON_UPD = 'U';
 
-    private final static Charset UTF8_CS = Charset.forName("UTF-8");
+    private final static Charset UTF8_CS = StandardCharsets.UTF_8;
 
     public static final int BYTE_BUFFER_AUTO_INCREMENT_SIZE = 10000;
     public static final int BYTE_BUFFER_AUTO_INCREMENT_BREATHING_SPACE = 1000;
@@ -90,8 +88,10 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             JournalControlFieldRegistry.getNumberOfJournalControlFields();
 
     private SimpleDateFormat outTimestampFormat;
-    private final SimpleDateFormat outDateOnlyFormat = new SimpleDateFormat("yyyy-MM-dd");
-    private final SimpleDateFormat outTimeOnlyFormat = new SimpleDateFormat("HH:mm:ss");
+    private final SimpleDateFormat outDateOnlyFormat 
+            = new SimpleDateFormat("yyyy-MM-dd");
+    private final SimpleDateFormat outTimeOnlyFormat 
+            = new SimpleDateFormat("HH:mm:ss");
 
     private int clobTruncationPoint;
     private int blobTruncationPoint;
@@ -137,11 +137,17 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
     private final String escapedColSep;
     private final String escapedColDel;
 
+    // are we processing the after image?
     private boolean afterImage = false;
-
-    private ByteBuffer outBuffer = ByteBuffer.allocate(BYTE_BUFFER_AUTO_INCREMENT_SIZE);
-    private ByteBuffer csvNullImage = null;
+    // make the current operation type available in all callbacks
     private int currentOpType;
+
+    // main output buffer
+    private ByteBuffer outBuffer 
+            = ByteBuffer.allocate(BYTE_BUFFER_AUTO_INCREMENT_SIZE);
+    // special output buffers for all-NULL and for all-NULL-newline cases
+    private ByteBuffer csvNullImage = null;
+    private ByteBuffer csvNullImageNL = null;
 
     /**
      * Get string in the form of UTF-8 bytes buffer
@@ -419,11 +425,8 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         if (image != null)
             handleImage(image);
 
-        // If the before image was processed, make sure the next data image is
-        // treated as the after image
-        if (!afterImage) {
-            afterImage = true;
-        }
+        // Make sure the next data image is treated as the after image
+        afterImage = true;
 
         return outBuffer;
     }
@@ -518,7 +521,7 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             }
         } else if (colObj instanceof Boolean) {
             final String outString;
-            if (((Boolean) colObj).booleanValue()) {
+            if ((Boolean) colObj) {
                 outString = ONE_AS_STRING;
             } else {
                 outString = ZERO_AS_STRING;
@@ -566,7 +569,10 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
         } else if (colObj instanceof BigDecimal) {
             addElement(colName, ((BigDecimal) colObj).toString());
         } else {
-            addElement(colName, colObj.toString());
+            if (colObj==null)
+                addElement(colName, "");
+            else
+                addElement(colName, colObj.toString());
         }
         return needToCloseQuote;
     }
@@ -594,19 +600,38 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             throws DataTypeConversionException {
         final ByteBuffer returnByteBuffer;
         if (csvOutput) {
+            // Is it a "regular" NULL image, or NULL-newline image?
+            boolean regularNullImage = true;
+            if (afterImage) {
+                // We are processing the "after" NULL image.
+                // Do we need the "newline prefix" in it?
+                if (prefixNewLine.length() > 0)
+                    regularNullImage = false;
+            }
             // There is a separate data formatter for each table, so a null
-            // image is the same for each row, so just need to create it once
-            if (csvNullImage == null) {
-                String outString = "";
+            // image is the same for each row, so just need to create it once.
+            // Grab the cached image.
+            ByteBuffer bb = regularNullImage ? csvNullImage : csvNullImageNL;
+            if (bb==null) {
+                final StringBuilder out = new StringBuilder();
                 if (image != null) {
                     for (int i = 1; i <= image.getColumnCount() - NUM_TRAILING_COLUMNS; i++) {
-                        outString = outString + columnSeparator;
+                        out.append(columnSeparator);
                     }
                 }
-                csvNullImage = ByteBuffer.wrap(toByteArray(outString));
-                csvNullImage.position(csvNullImage.capacity());
+                if (! regularNullImage) {
+                    // Null image appended with the "newline prefix".
+                    out.append(prefixNewLine);
+                }
+                bb = ByteBuffer.wrap(toByteArray(out.toString()));
+                bb.position(bb.capacity());
+                // Set the cached image
+                if (regularNullImage)
+                    csvNullImage = bb;
+                else
+                    csvNullImageNL = bb;
             }
-            returnByteBuffer = csvNullImage;
+            returnByteBuffer = bb;
         } else {
             String outString = "";
             if (afterImage) {
@@ -615,7 +640,10 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
             returnByteBuffer = ByteBuffer.wrap(toByteArray(outString));
             returnByteBuffer.position(returnByteBuffer.capacity());
         }
-        afterImage = true; // Next image is the after image
+
+        // Make sure the next data image is treated as the after image
+        afterImage = true;
+
         return returnByteBuffer;
     }
 
@@ -631,8 +659,10 @@ public class FlatFileDataFormat implements DataStageDataFormatIF {
     @Override
     public ByteBuffer formatJournalControlFields(ReplicationEventIF event, int opType)
             throws DataTypeConversionException {
-        // Make sure that the JSON record is only closed after the full image
-        // has been processed
+        // Journal control fields precede the before image, 
+        // which is followed by after image. Among other things, re-setting
+        // this flag is to make sure that the JSON record 
+        // is only closed after the full image has been processed.
         afterImage = false;
 
         // Determine the character to use to indicate the operation type

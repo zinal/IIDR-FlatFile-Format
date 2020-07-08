@@ -1,11 +1,5 @@
 package com.ibm.idrcdc.userexit;
 
-import com.datamirror.ts.target.publication.userexit.DataRecordIF;
-import com.datamirror.ts.target.publication.userexit.DataTypeConversionException;
-import com.datamirror.ts.target.publication.userexit.InvalidSetDataException;
-import com.datamirror.ts.target.publication.userexit.Timestamp12;
-import com.datamirror.ts.target.publication.userexit.datastage.DataStageDataFormatIF;
-import com.ibm.idrcdc.userexit.FlatFileDataFormat;
 import java.io.FileOutputStream;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
@@ -15,6 +9,8 @@ import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.Random;
+import com.datamirror.ts.target.publication.userexit.*;
+import com.datamirror.ts.target.publication.userexit.datastage.DataStageDataFormatIF;
 
 /**
  *
